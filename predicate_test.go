@@ -31,6 +31,38 @@ func TestP(t *testing.T) {
 	c.Assert(or(2), qt.IsTrue)
 	c.Assert(or(10), qt.IsTrue)
 	c.Assert(or(11), qt.IsFalse)
+
+	var nilp predicate.P[int] = nil
+	c.Assert(nilp.Or(intP1)(1), qt.IsTrue)
+	c.Assert(nilp.And(intP1)(1), qt.IsTrue)
+
+	var zerop predicate.P[int]
+	c.Assert(zerop.Or(intP1)(1), qt.IsTrue)
+	c.Assert(zerop.And(intP1)(1), qt.IsTrue)
+}
+
+func TestFilter(t *testing.T) {
+	c := qt.New(t)
+
+	var p predicate.P[int] = intP1
+	p = p.Or(intP2)
+
+	ints := []int{1, 2, 3, 4, 1, 6, 7, 8, 2}
+
+	c.Assert(p.Filter(ints), qt.DeepEquals, []int{1, 2, 1, 2})
+	c.Assert(ints, qt.DeepEquals, []int{1, 2, 1, 2, 1, 6, 7, 8, 2})
+}
+
+func TestFilterCopy(t *testing.T) {
+	c := qt.New(t)
+
+	var p predicate.P[int] = intP1
+	p = p.Or(intP2)
+
+	ints := []int{1, 2, 3, 4, 1, 6, 7, 8, 2}
+
+	c.Assert(p.FilterCopy(ints), qt.DeepEquals, []int{1, 2, 1, 2})
+	c.Assert(ints, qt.DeepEquals, []int{1, 2, 3, 4, 1, 6, 7, 8, 2})
 }
 
 var intP1 = func(i int) bool {
