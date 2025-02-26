@@ -1,6 +1,6 @@
 module github.com/bep/predicate
 
-go 1.20
+go 1.23
 
 require github.com/frankban/quicktest v1.14.5
 
