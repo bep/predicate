@@ -3,52 +3,104 @@
 
 package predicate
 
+// Match represents the result of a predicate evaluation.
+type Match interface {
+	OK() bool
+}
+
+var (
+	// Predefined Match values for common cases.
+	True  = BoolMatch(true)
+	False = BoolMatch(false)
+)
+
+// BoolMatch is a simple Match implementation based on a boolean value.
+type BoolMatch bool
+
+func (b BoolMatch) OK() bool {
+	return bool(b)
+}
+
+// breakMatch is a Match implementation that always returns false for OK() and signals to break evaluation.
+type breakMatch struct{}
+
+func (b breakMatch) OK() bool {
+	return false
+}
+
+var matchBreak = breakMatch{}
+
 // P is a predicate function that tests whether a value of type T satisfies some condition.
 type P[T any] func(T) bool
 
-// And returns a predicate that is a short-circuiting logical AND of this and the given predicates.
-func (p P[T]) And(ps ...P[T]) P[T] {
+// PR is a predicate function that tests whether a value of type T satisfies some condition and returns a Match result.
+type PR[T any] func(T) Match
+
+// BoolFunc returns a P[T] version of this predicate.
+func (p PR[T]) BoolFunc() P[T] {
 	return func(v T) bool {
-		for _, pp := range ps {
-			if !pp(v) {
-				return false
+		if p == nil {
+			return false
+		}
+		return p(v).OK()
+	}
+}
+
+// And returns a predicate that is a short-circuiting logical AND of this and the given predicates.
+func (p PR[T]) And(ps ...PR[T]) PR[T] {
+	return func(v T) Match {
+		if p != nil {
+			m := p(v)
+			if !m.OK() || shouldBreak(m) {
+				return matchBreak
 			}
 		}
-		if p == nil {
-			return true
+		for _, pp := range ps {
+			m := pp(v)
+			if !m.OK() || shouldBreak(m) {
+				return matchBreak
+			}
 		}
-		return p(v)
+		return BoolMatch(true)
 	}
 }
 
 // Or returns a predicate that is a short-circuiting logical OR of this and the given predicates.
-func (p P[T]) Or(ps ...P[T]) P[T] {
-	return func(v T) bool {
-		for _, pp := range ps {
-			if pp(v) {
-				return true
+func (p PR[T]) Or(ps ...PR[T]) PR[T] {
+	return func(v T) Match {
+		if p != nil {
+			m := p(v)
+			if m.OK() {
+				return m
+			}
+			if shouldBreak(m) {
+				return matchBreak
 			}
 		}
-		if p == nil {
-			return false
+		for _, pp := range ps {
+			m := pp(v)
+			if m.OK() {
+				return m
+			}
+			if shouldBreak(m) {
+				return matchBreak
+			}
 		}
-		return p(v)
+		return BoolMatch(false)
 	}
 }
 
-// Negate returns a predicate that is a logical negation of this predicate.
-func (p P[T]) Negate() P[T] {
-	return func(v T) bool {
-		return !p(v)
-	}
+func shouldBreak(m Match) bool {
+	_, ok := m.(breakMatch)
+	return ok
 }
 
 // Filter returns a new slice holding only the elements of s that satisfy p.
 // Filter modifies the contents of the slice s and returns the modified slice, which may have a smaller length.
-func (p P[T]) Filter(s []T) []T {
+func (p PR[T]) Filter(s []T) []T {
 	var n int
 	for _, v := range s {
-		if p(v) {
+		if p(v).OK() {
 			s[n] = v
 			n++
 		}
@@ -57,10 +109,10 @@ func (p P[T]) Filter(s []T) []T {
 }
 
 // FilterCopy returns a new slice holding only the elements of s that satisfy p.
-func (p P[T]) FilterCopy(s []T) []T {
+func (p PR[T]) FilterCopy(s []T) []T {
 	var result []T
 	for _, v := range s {
-		if p(v) {
+		if p(v).OK() {
 			result = append(result, v)
 		}
 	}

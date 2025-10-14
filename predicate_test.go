@@ -4,7 +4,6 @@
 package predicate_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/bep/predicate"
@@ -12,43 +11,62 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestP(t *testing.T) {
+func TestPredicate(t *testing.T) {
 	c := qt.New(t)
 
-	var p predicate.P[int] = intP1
+	n := func() predicate.PR[int] {
+		var pr predicate.PR[int]
+		return pr
+	}
 
-	c.Assert(p(1), qt.IsTrue)
+	var pr predicate.PR[int]
+	p := pr.BoolFunc()
+	c.Assert(p(1), qt.IsFalse)
+
+	pr = n().Or(intP1).Or(intP2)
+	p = pr.BoolFunc()
+	c.Assert(p(1), qt.IsTrue)  // true || false
+	c.Assert(p(2), qt.IsTrue)  // false || true
+	c.Assert(p(3), qt.IsFalse) // false || false
+
+	pr = pr.And(intP3)
+	p = pr.BoolFunc()
+	c.Assert(p(2), qt.IsFalse)  // true || true && false
+	c.Assert(pr(10), qt.IsTrue) // true || true && true
+
+	pr = pr.And(intP4)
+	p = pr.BoolFunc()
+	c.Assert(p(10), qt.IsTrue)  // true || true && true && true
+	c.Assert(p(2), qt.IsFalse)  // true || true && false && false
+	c.Assert(p(1), qt.IsFalse)  // true || false && false && false
+	c.Assert(p(3), qt.IsFalse)  // false || false && false && false
+	c.Assert(p(4), qt.IsFalse)  // false || false && false && false
+	c.Assert(p(42), qt.IsFalse) // false || false && false && false
+
+	pr = n().And(intP1).And(intP2).And(intP3).And(intP4)
+	p = pr.BoolFunc()
+	c.Assert(p(1), qt.IsFalse)
 	c.Assert(p(2), qt.IsFalse)
+	c.Assert(p(10), qt.IsTrue)
 
-	neg := p.Negate()
-	c.Assert(neg(1), qt.IsFalse)
-	c.Assert(neg(2), qt.IsTrue)
+	pr = n().And(intP1).And(intP2).And(intP3).And(intP4)
+	p = pr.BoolFunc()
+	c.Assert(p(1), qt.IsFalse)
+	c.Assert(p(2), qt.IsFalse)
+	c.Assert(p(10), qt.IsTrue)
 
-	and := p.And(intP2)
-	c.Assert(and(1), qt.IsFalse)
-	c.Assert(and(2), qt.IsFalse)
-	c.Assert(and(10), qt.IsTrue)
-
-	or := p.Or(intP2)
-	c.Assert(or(1), qt.IsTrue)
-	c.Assert(or(2), qt.IsTrue)
-	c.Assert(or(10), qt.IsTrue)
-	c.Assert(or(11), qt.IsFalse)
-
-	var nilp predicate.P[int] = nil
-	c.Assert(nilp.Or(intP1)(1), qt.IsTrue)
-	c.Assert(nilp.And(intP1)(1), qt.IsTrue)
-
-	var zerop predicate.P[int]
-	c.Assert(zerop.Or(intP1)(1), qt.IsTrue)
-	c.Assert(zerop.And(intP1)(1), qt.IsTrue)
+	pr = n().Or(intP1).Or(intP2).Or(intP3)
+	p = pr.BoolFunc()
+	c.Assert(p(1), qt.IsTrue)
+	c.Assert(p(10), qt.IsTrue)
+	c.Assert(p(4), qt.IsFalse)
 }
 
 func TestFilter(t *testing.T) {
 	c := qt.New(t)
 
-	var p predicate.P[int] = intP1
-	p = p.Or(intP2)
+	var p predicate.PR[int]
+	p = p.Or(intP1).Or(intP2)
 
 	ints := []int{1, 2, 3, 4, 1, 6, 7, 8, 2}
 
@@ -59,8 +77,8 @@ func TestFilter(t *testing.T) {
 func TestFilterCopy(t *testing.T) {
 	c := qt.New(t)
 
-	var p predicate.P[int] = intP1
-	p = p.Or(intP2)
+	var p predicate.PR[int]
+	p = p.Or(intP1).Or(intP2)
 
 	ints := []int{1, 2, 3, 4, 1, 6, 7, 8, 2}
 
@@ -68,49 +86,64 @@ func TestFilterCopy(t *testing.T) {
 	c.Assert(ints, qt.DeepEquals, []int{1, 2, 3, 4, 1, 6, 7, 8, 2})
 }
 
-var intP1 = func(i int) bool {
-	if i == 10 {
-		return true
-	}
-	return i == 1
+func BenchmarkPredicate(b *testing.B) {
+	b.Run("and or no match", func(b *testing.B) {
+		var p predicate.PR[int] = intP1
+		p = p.And(intP2).Or(intP3)
+		for i := 0; i < b.N; i++ {
+			_ = p(3).OK()
+		}
+	})
+
+	b.Run("and and no match", func(b *testing.B) {
+		var p predicate.PR[int] = intP1
+		p = p.And(intP2)
+		for range b.N {
+			_ = p(3).OK()
+		}
+	})
+
+	b.Run("and and match", func(b *testing.B) {
+		var p predicate.PR[int] = intP1
+		p = p.And(intP2)
+		for range b.N {
+			_ = p(10).OK()
+		}
+	})
+
+	b.Run("or or match", func(b *testing.B) {
+		var p predicate.PR[int] = intP1
+		p = p.Or(intP2).Or(intP3)
+		for range b.N {
+			_ = p(2).OK()
+		}
+	})
 }
 
-var intP2 = func(i int) bool {
+var intP1 = func(i int) predicate.Match {
 	if i == 10 {
-		return true
+		return predicate.True
 	}
-	return i == 2
+	return predicate.BoolMatch(i == 1)
 }
 
-func ExampleP() {
-	var (
-		pHello predicate.P[string] = func(s string) bool {
-			return s == "hello"
-		}
-		pWorld predicate.P[string] = func(s string) bool {
-			return s == "world"
-		}
-		pAny predicate.P[string] = func(s string) bool {
-			return s != ""
-		}
-	)
+var intP2 = func(i int) predicate.Match {
+	if i == 10 {
+		return predicate.True
+	}
+	return predicate.BoolMatch(i == 2)
+}
 
-	fmt.Println("Or (true):", pHello.Or(pWorld)("hello"))
-	fmt.Println("Or (false):", pHello.Or(pWorld)("foo"))
-	fmt.Println("And (false):", pHello.And(pWorld)("hello"))
-	fmt.Println("And (true):", pHello.And(pAny)("hello"))
-	fmt.Println("Negate (false):", pHello.Negate()("hello"))
-	fmt.Println("Negate (true):", pHello.Negate()("world"))
-	fmt.Println("Chained (true):", pHello.And(pAny.Or(pWorld))("hello"))
-	fmt.Println("Chained (false):", pHello.And(pAny.Or(pWorld))("foo"))
+var intP3 = func(i int) predicate.Match {
+	if i == 10 {
+		return predicate.True
+	}
+	return predicate.BoolMatch(i == 3)
+}
 
-	// Output:
-	// Or (true): true
-	// Or (false): false
-	// And (false): false
-	// And (true): true
-	// Negate (false): false
-	// Negate (true): true
-	// Chained (true): true
-	// Chained (false): false
+var intP4 = func(i int) predicate.Match {
+	if i == 10 {
+		return predicate.True
+	}
+	return predicate.BoolMatch(i == 4)
 }
