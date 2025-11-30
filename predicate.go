@@ -33,6 +33,22 @@ var matchBreak = breakMatch{}
 // P is a predicate function that tests whether a value of type T satisfies some condition.
 type P[T any] func(T) bool
 
+// Or returns a predicate that is a short-circuiting logical OR of this and the given predicates.
+// Note that P[T] only supports Or. For chained AND/OR logic, use PR[T].
+func (p P[T]) Or(ps ...P[T]) P[T] {
+	return func(v T) bool {
+		if p != nil && p(v) {
+			return true
+		}
+		for _, pp := range ps {
+			if pp(v) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 // PR is a predicate function that tests whether a value of type T satisfies some condition and returns a Match result.
 type PR[T any] func(T) Match
 
