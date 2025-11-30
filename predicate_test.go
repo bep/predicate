@@ -120,6 +120,19 @@ func BenchmarkPredicate(b *testing.B) {
 	})
 }
 
+func TestPOr(t *testing.T) {
+	c := qt.New(t)
+
+	var (
+		truthy predicate.P[int] = func(i int) bool { return true }
+		falsy  predicate.P[int] = func(i int) bool { return false }
+	)
+
+	c.Assert(truthy.Or(falsy)(42), qt.IsTrue)
+	c.Assert(falsy.Or(truthy)(42), qt.IsTrue)
+	c.Assert(falsy.Or(falsy)(42), qt.IsFalse)
+}
+
 var intP1 = func(i int) predicate.Match {
 	if i == 10 {
 		return predicate.True
