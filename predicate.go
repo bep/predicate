@@ -5,6 +5,7 @@ package predicate
 
 // Match represents the result of a predicate evaluation.
 type Match interface {
+	// OK returns true if the predicate matched.
 	OK() bool
 }
 
@@ -17,6 +18,7 @@ var (
 // BoolMatch is a simple Match implementation based on a boolean value.
 type BoolMatch bool
 
+// OK returns the underlying boolean value.
 func (b BoolMatch) OK() bool {
 	return bool(b)
 }
